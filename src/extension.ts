@@ -30,7 +30,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		void refreshBranches();
 	});
 
-	const commitsPanelManager = new BranchCommitsPanelManager(branchService);
+	const commitsPanelManager = new BranchCommitsPanelManager(branchService, context.extensionUri);
 
 	const focusBranch = async (branchName: string): Promise<void> => {
 		const branchItem = branchesProvider.getBranchItem(branchName);

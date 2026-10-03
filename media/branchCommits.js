@@ -29,12 +29,19 @@ const filesEmpty = document.getElementById('files-empty');
 const diffPath = document.getElementById('diff-path');
 const diffBefore = document.getElementById('diff-before');
 const diffAfter = document.getElementById('diff-after');
+const diffPrevButton = document.getElementById('diff-prev');
+const diffNextButton = document.getElementById('diff-next');
+const filesPane = document.querySelector('.files-pane');
+const filesSplitter = document.getElementById('files-splitter');
 
 let selectedCommitHash = '';
 let selectedFilePath = '';
 let selectedPreviousPath = undefined;
 let isDraggingSplitter = false;
+let isDraggingFilesSplitter = false;
 let isSyncingDiffScroll = false;
+let diffRows = [];
+let activeDiffChangeIndex = -1;
 
 document.querySelectorAll('.commit-row').forEach((row) => {
     row.addEventListener('click', () => {
@@ -54,6 +61,7 @@ document.querySelectorAll('.commit-row').forEach((row) => {
 
         openDetailsAtHalf();
         filesList.innerHTML = '';
+        filesList.style.display = 'none';
         filesEmpty.textContent = 'Loading changed files...';
         filesEmpty.style.display = 'block';
         diffPath.textContent = 'Diff';
@@ -95,6 +103,14 @@ diffAfter.addEventListener('scroll', () => {
     syncDiffScroll(diffAfter, diffBefore);
 });
 
+diffPrevButton.addEventListener('click', () => {
+    moveToDiffChange(-1);
+});
+
+diffNextButton.addEventListener('click', () => {
+    moveToDiffChange(1);
+});
+
 splitter.addEventListener('pointerdown', (event) => {
     if (!details.classList.contains('is-open')) {
         return;
@@ -102,6 +118,7 @@ splitter.addEventListener('pointerdown', (event) => {
 
     isDraggingSplitter = true;
     document.body.classList.add('is-resizing');
+    document.body.style.cursor = 'row-resize';
     splitter.setPointerCapture(event.pointerId);
     event.preventDefault();
 });
@@ -121,12 +138,69 @@ splitter.addEventListener('pointerup', (event) => {
 
     isDraggingSplitter = false;
     document.body.classList.remove('is-resizing');
+    document.body.style.cursor = '';
     splitter.releasePointerCapture(event.pointerId);
 });
 
 splitter.addEventListener('pointercancel', () => {
     isDraggingSplitter = false;
     document.body.classList.remove('is-resizing');
+    document.body.style.cursor = '';
+});
+
+filesSplitter.addEventListener('pointerdown', (event) => {
+    if (!details.classList.contains('is-open')) {
+        return;
+    }
+
+    isDraggingFilesSplitter = true;
+    document.body.classList.add('is-resizing');
+    document.body.style.cursor = 'col-resize';
+    filesSplitter.setPointerCapture(event.pointerId);
+    event.preventDefault();
+});
+
+filesSplitter.addEventListener('pointermove', (event) => {
+    if (!isDraggingFilesSplitter) {
+        return;
+    }
+
+    setFilesPaneWidth(event.clientX);
+});
+
+filesSplitter.addEventListener('pointerup', (event) => {
+    if (!isDraggingFilesSplitter) {
+        return;
+    }
+
+    isDraggingFilesSplitter = false;
+    document.body.classList.remove('is-resizing');
+    document.body.style.cursor = '';
+    filesSplitter.releasePointerCapture(event.pointerId);
+});
+
+filesSplitter.addEventListener('pointercancel', () => {
+    isDraggingFilesSplitter = false;
+    document.body.classList.remove('is-resizing');
+    document.body.style.cursor = '';
+});
+
+window.addEventListener('pointermove', (event) => {
+    if (!isDraggingFilesSplitter) {
+        return;
+    }
+
+    setFilesPaneWidth(event.clientX);
+});
+
+window.addEventListener('pointerup', () => {
+    if (!isDraggingFilesSplitter) {
+        return;
+    }
+
+    isDraggingFilesSplitter = false;
+    document.body.classList.remove('is-resizing');
+    document.body.style.cursor = '';
 });
 
 window.addEventListener('resize', () => {
@@ -140,6 +214,7 @@ window.addEventListener('resize', () => {
 
 function renderFiles(files) {
     filesList.innerHTML = '';
+    filesList.style.display = 'none';
 
     if (!files.length) {
         filesEmpty.textContent = 'No changed files found for this commit.';
@@ -149,6 +224,7 @@ function renderFiles(files) {
         return;
     }
 
+    filesList.style.display = 'block';
     filesEmpty.style.display = 'none';
 
     files.forEach((file, index) => {
@@ -236,32 +312,57 @@ function setTopPaneHeight(requestedHeight) {
     mainLayout.style.setProperty('--top-pane-height', nextHeight + 'px');
 }
 
+function setFilesPaneWidth(clientX) {
+    if (!filesPane || !details.classList.contains('is-open')) {
+        return;
+    }
+
+    const bounds = details.getBoundingClientRect();
+    const relativeX = Math.min(Math.max(clientX - bounds.left, 150), bounds.width - 160);
+    filesPane.style.width = relativeX + 'px';
+    filesPane.style.flexBasis = relativeX + 'px';
+}
+
 function syncDiffScroll(source, target) {
     if (isSyncingDiffScroll) {
         return;
     }
 
     isSyncingDiffScroll = true;
-    const sourceRange = source.scrollHeight - source.clientHeight;
-    const targetRange = target.scrollHeight - target.clientHeight;
-    const ratio = sourceRange <= 0 ? 0 : source.scrollTop / sourceRange;
-    target.scrollTop = Math.max(0, ratio * targetRange);
+
+    const verticalSourceRange = Math.max(source.scrollHeight - source.clientHeight, 0);
+    const verticalTargetRange = Math.max(target.scrollHeight - target.clientHeight, 0);
+    const verticalRatio = verticalSourceRange <= 0 ? 0 : source.scrollTop / verticalSourceRange;
+    target.scrollTop = Math.max(0, verticalRatio * verticalTargetRange);
+
+    const horizontalSourceRange = Math.max(source.scrollWidth - source.clientWidth, 0);
+    const horizontalTargetRange = Math.max(target.scrollWidth - target.clientWidth, 0);
+    const horizontalRatio = horizontalSourceRange <= 0 ? 0 : source.scrollLeft / horizontalSourceRange;
+    target.scrollLeft = Math.max(0, horizontalRatio * horizontalTargetRange);
+
     isSyncingDiffScroll = false;
 }
 
 function renderRawDiff(beforeText, afterText) {
     const beforeLines = splitLines(beforeText).map((line) => ({ text: line, type: 'context' }));
     const afterLines = splitLines(afterText).map((line) => ({ text: line, type: 'context' }));
+    diffRows = [];
+    activeDiffChangeIndex = -1;
     renderDiffColumn(diffBefore, beforeLines);
     renderDiffColumn(diffAfter, afterLines);
     diffBefore.scrollTop = 0;
     diffAfter.scrollTop = 0;
+    diffBefore.scrollLeft = 0;
+    diffAfter.scrollLeft = 0;
+    updateDiffNavigationState();
 }
 
 function renderHighlightedDiff(beforeText, afterText) {
     const beforeLines = splitLines(beforeText);
     const afterLines = splitLines(afterText);
     const alignedRows = buildAlignedDiffRows(beforeLines, afterLines);
+    diffRows = alignedRows;
+    activeDiffChangeIndex = -1;
 
     renderDiffColumn(
         diffBefore,
@@ -274,6 +375,9 @@ function renderHighlightedDiff(beforeText, afterText) {
 
     diffBefore.scrollTop = 0;
     diffAfter.scrollTop = 0;
+    diffBefore.scrollLeft = 0;
+    diffAfter.scrollLeft = 0;
+    updateDiffNavigationState();
 }
 
 function renderDiffColumn(container, rows) {
@@ -299,6 +403,48 @@ function renderDiffColumn(container, rows) {
     });
 
     container.appendChild(fragment);
+}
+
+function getDiffChangeIndexes() {
+    return diffRows
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => row.beforeType !== 'context' || row.afterType !== 'context')
+        .map(({ index }) => index);
+}
+
+function updateDiffNavigationState() {
+    const changeIndexes = getDiffChangeIndexes();
+
+    diffPrevButton.disabled = changeIndexes.length === 0 || activeDiffChangeIndex <= 0;
+    diffNextButton.disabled = changeIndexes.length === 0 || activeDiffChangeIndex >= changeIndexes.length - 1;
+}
+
+function centerDiffLine(container, lineIndex) {
+    const line = container.children[lineIndex];
+    if (!line) {
+        return;
+    }
+
+    const targetTop = line.offsetTop - container.clientHeight / 2 + line.offsetHeight / 2;
+    container.scrollTop = Math.max(0, Math.min(targetTop, container.scrollHeight - container.clientHeight));
+}
+
+function moveToDiffChange(offset) {
+    const changeIndexes = getDiffChangeIndexes();
+
+    if (!changeIndexes.length) {
+        return;
+    }
+
+    const currentIndex = activeDiffChangeIndex < 0 ? (offset > 0 ? -1 : changeIndexes.length) : activeDiffChangeIndex;
+    const nextIndex = currentIndex + offset;
+    const boundedIndex = Math.min(changeIndexes.length - 1, Math.max(0, nextIndex));
+    activeDiffChangeIndex = boundedIndex;
+
+    const actualIndex = changeIndexes[boundedIndex] ?? changeIndexes[0];
+    centerDiffLine(diffBefore, actualIndex);
+    centerDiffLine(diffAfter, actualIndex);
+    updateDiffNavigationState();
 }
 
 function splitLines(text) {

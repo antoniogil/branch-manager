@@ -107,6 +107,7 @@ tr:hover {
     min-height: 160px;
     flex: 1 1 auto;
     min-width: 0;
+    background: var(--vscode-editor-background);
 }
 
 .details.is-open {
@@ -115,11 +116,22 @@ tr:hover {
 
 .files-pane {
     width: 34%;
-    min-width: 240px;
+    min-width: 180px;
+    max-width: 70%;
     min-height: 0;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    background: var(--vscode-sideBar-background, var(--vscode-editor-background));
     border-right: 1px solid var(--vscode-panel-border);
-    display: flex;
-    flex-direction: column;
+}
+
+.files-splitter {
+    width: 6px;
+    flex: 0 0 6px;
+    cursor: col-resize;
+    border-left: 1px solid var(--vscode-panel-border);
+    border-right: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-editor-lineHighlightBackground);
 }
 
 .diff-pane {
@@ -128,16 +140,31 @@ tr:hover {
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    background: var(--vscode-editor-background);
+}
+
+.pane-header {
+    display: flex;
+    align-items: center;
+    background: var(--vscode-editor-lineHighlightBackground);
 }
 
 .pane-title {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 32px;
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 8px;
-    border-bottom: 1px solid var(--vscode-panel-border);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     background: var(--vscode-editor-lineHighlightBackground);
+    color: var(--vscode-foreground);
 }
 
 .files-list {
@@ -145,7 +172,10 @@ tr:hover {
     padding: 0;
     list-style: none;
     overflow: auto;
-    flex: 1;
+    min-height: 0;
+    display: block;
+    height: 100%;
+    background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }
 
 .file-item {
@@ -156,6 +186,9 @@ tr:hover {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-height: 28px;
+    box-sizing: border-box;
+    color: var(--vscode-foreground);
 }
 
 .file-item:hover {
@@ -175,6 +208,7 @@ tr:hover {
     padding: 1px 4px;
     text-transform: uppercase;
     flex: 0 0 auto;
+    background: rgba(127, 127, 127, 0.08);
 }
 
 .status-added {
@@ -200,11 +234,47 @@ tr:hover {
     white-space: nowrap;
 }
 
+.diff-controls {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    flex: 0 0 auto;
+    background: var(--vscode-editor-lineHighlightBackground);
+}
+
+.diff-nav-button {
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background));
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.diff-nav-button:hover:not(:disabled) {
+    background: var(--vscode-list-hoverBackground);
+}
+
+.diff-nav-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
 .diff-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     min-height: 0;
     flex: 1;
+    background: var(--vscode-editor-background);
 }
 
 .diff-column {
@@ -212,6 +282,7 @@ tr:hover {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    background: var(--vscode-editor-background);
 }
 
 .diff-column+.diff-column {
@@ -224,6 +295,8 @@ tr:hover {
     text-transform: uppercase;
     padding: 6px 8px;
     border-bottom: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-editor-lineHighlightBackground);
+    color: var(--vscode-foreground);
 }
 
 pre {
@@ -247,13 +320,21 @@ pre {
     font-size: 12px;
     line-height: 1.45;
     border-top: 0;
+    background: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground, var(--vscode-foreground));
 }
 
 .diff-line {
+    display: block;
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
     padding: 0 8px;
     min-height: 20px;
     white-space: pre;
     border-bottom: 1px solid var(--vscode-panel-border);
+    background-clip: padding-box;
+    color: var(--vscode-editor-foreground, var(--vscode-foreground));
 }
 
 .diff-line.is-added {
@@ -269,7 +350,11 @@ pre {
 }
 
 .placeholder {
+    height: 100%;
     padding: 8px;
     color: var(--vscode-descriptionForeground);
     font-size: 12px;
+    min-height: 0;
+    box-sizing: border-box;
+    background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }

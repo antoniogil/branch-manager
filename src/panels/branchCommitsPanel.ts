@@ -57,8 +57,15 @@ export function renderCommitsTableHtml(
         <ul id="files-list" class="files-list"></ul>
         <div id="files-empty" class="placeholder">Select a commit to view changed files.</div>
       </div>
+      <div id="files-splitter" class="files-splitter" role="separator" aria-orientation="vertical" aria-label="Resize files list"></div>
       <div class="diff-pane">
-        <div class="pane-title" id="diff-path">Diff</div>
+        <div class="pane-header">
+          <div class="pane-title" id="diff-path">Diff</div>
+          <div class="diff-controls" aria-label="Diff navigation controls">
+            <button id="diff-prev" class="diff-nav-button" type="button" aria-label="Previous change" title="Previous change">↑</button>
+            <button id="diff-next" class="diff-nav-button" type="button" aria-label="Next change" title="Next change">↓</button>
+          </div>
+        </div>
         <div class="diff-grid">
           <div class="diff-column">
             <div class="diff-title">Before</div>

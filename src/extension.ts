@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 import { BranchCommitsPanelManager } from './panels/branchCommitsPanel';
-import { BranchesTreeDataProvider } from './providers/branchTreeDataProvider';
+import { BranchesTreeDataProvider, BranchTreeItem } from './providers/branchTreeDataProvider';
 import { BranchService } from './services/branchService';
 import { GitExtensionService } from './services/gitExtensionService';
 
@@ -14,9 +14,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		showCollapseAll: true,
 	});
 
+	const revealCurrentBranch = async (): Promise<void> => {
+		const currentBranchItem = branchesProvider.getCurrentBranchItem();
+		if (currentBranchItem) {
+			await treeView.reveal(currentBranchItem, { select: true, focus: true, expand: true });
+			return;
+		}
+
+		const rootItems = await branchesProvider.getChildren();
+		const rootItem = Array.isArray(rootItems) ? rootItems[0] : undefined;
+		if (rootItem) {
+			await treeView.reveal(rootItem, { select: false, focus: false, expand: true });
+		}
+	};
+
 	const refreshBranches = async (): Promise<void> => {
 		const branches = await branchService.getBranchesByScope();
 		branchesProvider.setBranches(branches);
+		await revealCurrentBranch();
 	};
 
 	await refreshBranches();

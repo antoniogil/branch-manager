@@ -42,8 +42,8 @@ export class BranchTreeItem extends vscode.TreeItem {
         this.id = options?.id;
     }
 
-    static createScope(label: string, id: string): BranchTreeItem {
-        return new BranchTreeItem(label, 'scope', vscode.TreeItemCollapsibleState.Expanded, {
+    static createScope(label: string, id: string, collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.Expanded): BranchTreeItem {
+        return new BranchTreeItem(label, 'scope', collapsibleState, {
             id,
             contextValue: 'branchScope',
             tooltip: label,
@@ -82,10 +82,12 @@ export class BranchesTreeDataProvider implements vscode.TreeDataProvider<BranchT
     private readonly parentById = new Map<string, string | undefined>();
     private rootItems: BranchTreeItem[] = [];
 
+    private readonly repositoryName: string;
     private localBranches: BranchDetails[];
     private originBranches: BranchDetails[] = [];
 
-    constructor(branchNames: string[]) {
+    constructor(branchNames: string[], repositoryName?: string) {
+        this.repositoryName = repositoryName?.trim() || this.resolveDefaultRepositoryName();
         this.localBranches = this.normalizeBranchList(branchNames);
         this.rebuildBranchItems();
     }
@@ -116,6 +118,15 @@ export class BranchesTreeDataProvider implements vscode.TreeDataProvider<BranchT
             ?? BranchTreeItem.createBranch(branchName, branchName, `branch:fallback:${branchName}`);
     }
 
+    getCurrentBranchItem(): BranchTreeItem | undefined {
+        const currentLocalBranch = this.localBranches.find((branch) => branch.isCurrent);
+        if (!currentLocalBranch) {
+            return undefined;
+        }
+
+        return this.branchItems.get(currentLocalBranch.name) ?? undefined;
+    }
+
     getTreeItem(element: BranchTreeItem): vscode.TreeItem {
         return element;
     }
@@ -141,10 +152,7 @@ export class BranchesTreeDataProvider implements vscode.TreeDataProvider<BranchT
         const item = BranchTreeItem.createBranch(displayName, fullBranchRef, `branch:${fullBranchRef}`);
 
         if (branch.isCurrent) {
-            item.label = {
-                label: displayName,
-                highlights: [[0, displayName.length]],
-            };
+            item.label = displayName;
         }
 
         item.description = `↑${branch.ahead} ↓${branch.behind}`;
@@ -214,10 +222,24 @@ export class BranchesTreeDataProvider implements vscode.TreeDataProvider<BranchT
         this.parentById.set(item.id, parentId);
     }
 
-    private registerScope(scope: BranchTreeItem): void {
-        this.rootItems.push(scope);
-        this.registerNode(scope, undefined);
+    private registerScope(scope: BranchTreeItem, parent?: BranchTreeItem): void {
+        const parentId = parent?.id;
+
+        if (parentId) {
+            const siblings = this.childrenById.get(parentId) ?? [];
+            siblings.push(scope);
+            this.childrenById.set(parentId, siblings);
+        } else {
+            this.rootItems.push(scope);
+        }
+
+        this.registerNode(scope, parentId);
         this.childrenById.set(scope.id ?? '', []);
+    }
+
+    private resolveDefaultRepositoryName(): string {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        return workspaceFolder?.name?.trim() || 'Repository';
     }
 
     private sortChildrenRecursive(nodeId: string): void {
@@ -250,16 +272,18 @@ export class BranchesTreeDataProvider implements vscode.TreeDataProvider<BranchT
     }
 
     private addDefaultScopes(): void {
+        const repositoryScope = BranchTreeItem.createScope(this.repositoryName, 'scope:repository');
+        this.registerScope(repositoryScope);
+
         const localScope = BranchTreeItem.createScope('Local branches', 'scope:local');
-        this.registerScope(localScope);
+        this.registerScope(localScope, repositoryScope);
         this.addScopeBranches(localScope, this.localBranches, (name) => name, false);
 
-        const originScope = BranchTreeItem.createScope('origin', 'scope:origin');
-        this.registerScope(originScope);
+        const originScope = BranchTreeItem.createScope('origin', 'scope:origin', vscode.TreeItemCollapsibleState.Collapsed);
+        this.registerScope(originScope, repositoryScope);
         this.addScopeBranches(originScope, this.originBranches, (name) => `origin/${name}`, true);
 
-        this.sortChildrenRecursive(localScope.id ?? '');
-        this.sortChildrenRecursive(originScope.id ?? '');
+        this.sortChildrenRecursive(repositoryScope.id ?? '');
     }
 
     private clearState(): void {

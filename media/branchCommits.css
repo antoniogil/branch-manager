@@ -78,6 +78,30 @@ td {
     white-space: nowrap;
 }
 
+.commit-hash-cell {
+    width: 92px;
+}
+
+.commit-hash-link {
+    display: inline-block;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--vscode-textLink-foreground);
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.commit-hash-link:hover {
+    color: var(--vscode-textLink-activeForeground);
+}
+
+.commit-hash-link.is-copied {
+    color: var(--vscode-terminal-ansiGreen);
+}
+
 .commit-row {
     cursor: pointer;
 }
@@ -85,6 +109,17 @@ td {
 .commit-row.is-disabled {
     cursor: default;
     opacity: 0.7;
+}
+
+.commit-loading-row td {
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--vscode-descriptionForeground);
+    background: var(--vscode-editor-lineHighlightBackground);
 }
 
 .commit-row.is-selected {

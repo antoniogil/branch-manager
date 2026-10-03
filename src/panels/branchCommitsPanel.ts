@@ -7,15 +7,20 @@ export function renderCommitsTableHtml(
   commits: BranchCommit[],
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
+  branchName = '',
 ): string {
   const rows = commits
     .map(
       (commit) => `
 <tr class="commit-row${commit.fullHash === '-' ? ' is-disabled' : ''}" data-commit-hash="${escapeHtml(commit.fullHash)}">
         <td>${escapeHtml(getShortCommitTitle(commit.message))}</td>
-<td>${escapeHtml(commit.author)}</td>
+        <td>${escapeHtml(commit.author)}</td>
         <td>${escapeHtml(formatDateForDisplay(commit.date))}</td>
-        <td>${escapeHtml(commit.hash)}</td>
+        <td class="commit-hash-cell">
+          ${commit.fullHash === '-'
+            ? escapeHtml(commit.hash)
+            : `<button type="button" class="commit-hash-link" data-commit-hash="${escapeHtml(commit.fullHash)}" aria-label="Copy commit ${escapeHtml(commit.fullHash)}">${escapeHtml(commit.hash)}</button>`}
+        </td>
 </tr>`
     )
     .join('');
@@ -31,7 +36,7 @@ export function renderCommitsTableHtml(
   <title>Branch Commits</title>
   <link rel="stylesheet" href="${styleUri}" />
 </head>
-<body>
+<body data-branch-name="${escapeHtml(branchName)}">
   <div id="main-layout" class="main-layout">
     <div id="commits-pane" class="commits-pane">
       <table>
@@ -132,8 +137,8 @@ export class BranchCommitsPanelManager {
     this.attachWebviewMessageHandler();
 
     this.panel.title = `Commits: ${branchName}`;
-    const commits = await this.branchService.getBranchCommits(branchName);
-    this.panel.webview.html = renderCommitsTableHtml(commits, this.panel.webview, this.extensionUri);
+    const commits = await this.branchService.getBranchCommits(branchName, 50, 0);
+    this.panel.webview.html = renderCommitsTableHtml(commits, this.panel.webview, this.extensionUri, branchName);
     this.panel.reveal(vscode.ViewColumn.Active, false);
   }
 
@@ -143,9 +148,23 @@ export class BranchCommitsPanelManager {
     }
 
     this.webviewMessageDisposable?.dispose();
-    this.webviewMessageDisposable = this.panel.webview.onDidReceiveMessage(async (message: { type?: string; commitHash?: string; path?: string; previousPath?: string }) => {
+    this.webviewMessageDisposable = this.panel.webview.onDidReceiveMessage(async (message: { type?: string; commitHash?: string; path?: string; previousPath?: string; branchName?: string; offset?: number }) => {
       try {
         if (!this.panel || !message?.type) {
+          return;
+        }
+
+        if (message.type === 'loadMoreCommits') {
+          const branchName = message.branchName ?? this.panel.title.replace(/^Commits:\s*/i, '');
+          const offset = typeof message.offset === 'number' ? message.offset : 0;
+          const commits = await this.branchService.getBranchCommits(branchName, 50, offset);
+
+          await this.panel.webview.postMessage({
+            type: 'appendCommits',
+            commits,
+            offset: offset + commits.length,
+            hasMore: commits.length === 50,
+          });
           return;
         }
 
@@ -213,14 +232,6 @@ function formatDateForDisplay(value: string): string {
     return '-';
   }
 
-  const parts = value.split('-');
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    if (year.length === 4 && month.length === 2 && day.length === 2) {
-      return `${day}/${month}/${year}`;
-    }
-  }
-
   const parsedDate = new Date(value);
   if (Number.isNaN(parsedDate.getTime())) {
     return value;
@@ -229,7 +240,9 @@ function formatDateForDisplay(value: string): string {
   const day = String(parsedDate.getDate()).padStart(2, '0');
   const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
   const year = String(parsedDate.getFullYear());
-  return `${day}/${month}/${year}`;
+  const hours = String(parsedDate.getHours()).padStart(2, '0');
+  const minutes = String(parsedDate.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
 function escapeHtml(value: string): string {

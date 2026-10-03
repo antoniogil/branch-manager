@@ -34,7 +34,7 @@ function asDateString(value: Date | undefined): string {
         return '-';
     }
 
-    return value.toISOString().slice(0, 10);
+    return value.toISOString();
 }
 
 async function resolveRepositoryFromGitExtension(): Promise<BranchRepository | undefined> {
@@ -176,15 +176,15 @@ export class BranchService {
         return branches.local.map((branch) => branch.name);
     }
 
-    async getBranchCommits(branchName: string, maxEntries = 25): Promise<BranchCommit[]> {
+    async getBranchCommits(branchName: string, maxEntries = 50, skip = 0): Promise<BranchCommit[]> {
         const repository = await this.repositoryResolver();
         if (!repository) {
             return [NO_COMMITS_PLACEHOLDER];
         }
 
-        const entries = await repository.log({ maxEntries, refNames: [branchName] });
+        const entries = await repository.log({ maxEntries, skip, refNames: [branchName] });
         if (entries.length === 0) {
-            return [NO_COMMITS_PLACEHOLDER];
+            return [];
         }
 
         return entries.map((entry) => ({

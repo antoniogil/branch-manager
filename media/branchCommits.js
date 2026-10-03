@@ -42,10 +42,24 @@ let isDraggingFilesSplitter = false;
 let isSyncingDiffScroll = false;
 let diffRows = [];
 let activeDiffChangeIndex = -1;
+let currentBranchName = document.body.dataset.branchName || '';
+let currentCommitOffset = document.querySelectorAll('.commit-row').length;
+let isLoadingMoreCommits = false;
+let hasMoreCommits = true;
 
-document.querySelectorAll('.commit-row').forEach((row) => {
-    row.addEventListener('click', () => {
+function attachCommitRowHandlers(row) {
+    if (!row || row.dataset.boundSelection === 'true') {
+        return;
+    }
+
+    row.dataset.boundSelection = 'true';
+    row.addEventListener('click', (event) => {
         if (row.classList.contains('is-disabled')) {
+            return;
+        }
+
+        const hashLink = row.querySelector('.commit-hash-link');
+        if (hashLink && event.target && hashLink.contains(event.target)) {
             return;
         }
 
@@ -72,10 +86,179 @@ document.querySelectorAll('.commit-row').forEach((row) => {
             commitHash: selectedCommitHash,
         });
     });
+}
+
+function showLoadingMoreCommits() {
+    const tbody = document.querySelector('tbody');
+    if (!tbody) {
+        return;
+    }
+
+    let loadingRow = document.querySelector('.commit-loading-row');
+    if (!loadingRow) {
+        loadingRow = document.createElement('tr');
+        loadingRow.className = 'commit-loading-row';
+
+        const cell = document.createElement('td');
+        cell.colSpan = 4;
+        cell.textContent = 'Loading commits...';
+        loadingRow.appendChild(cell);
+        tbody.appendChild(loadingRow);
+    }
+}
+
+function hideLoadingMoreCommits() {
+    const loadingRow = document.querySelector('.commit-loading-row');
+    if (loadingRow) {
+        loadingRow.remove();
+    }
+}
+
+function appendMoreCommits() {
+    if (isLoadingMoreCommits || !currentBranchName || !hasMoreCommits) {
+        return;
+    }
+
+    isLoadingMoreCommits = true;
+    showLoadingMoreCommits();
+    vscode.postMessage({
+        type: 'loadMoreCommits',
+        branchName: currentBranchName,
+        offset: currentCommitOffset,
+    });
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const helper = document.createElement('textarea');
+    helper.value = text;
+    helper.setAttribute('readonly', 'true');
+    helper.style.position = 'fixed';
+    helper.style.top = '-9999px';
+    helper.style.left = '-9999px';
+    document.body.appendChild(helper);
+    helper.select();
+    document.execCommand('copy');
+    document.body.removeChild(helper);
+}
+
+document.addEventListener('click', async (event) => {
+    const link = event.target.closest('.commit-hash-link');
+    if (!link) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const hash = link.dataset.commitHash || link.textContent || '';
+    if (!hash) {
+        return;
+    }
+
+    const originalText = link.textContent;
+    link.classList.add('is-copied');
+    link.textContent = 'Copied!';
+
+    try {
+        await copyTextToClipboard(hash);
+    } catch {
+        link.textContent = 'Copy failed';
+    }
+
+    setTimeout(() => {
+        link.textContent = originalText;
+        link.classList.remove('is-copied');
+    }, 1200);
+});
+
+document.querySelectorAll('.commit-row').forEach((row) => {
+    attachCommitRowHandlers(row);
+});
+
+commitsPane.addEventListener('scroll', () => {
+    const loadMoreThreshold = commitsPane.scrollHeight - commitsPane.clientHeight - 80;
+    if (commitsPane.scrollTop >= loadMoreThreshold) {
+        appendMoreCommits();
+    }
 });
 
 window.addEventListener('message', (event) => {
     const message = event.data;
+
+    if (message.type === 'appendCommits') {
+        hideLoadingMoreCommits();
+
+        const rows = Array.isArray(message.commits) ? message.commits : [];
+        if (!rows.length) {
+            hasMoreCommits = false;
+            isLoadingMoreCommits = false;
+            return;
+        }
+
+        const tbody = document.querySelector('tbody');
+        if (!tbody) {
+            isLoadingMoreCommits = false;
+            return;
+        }
+
+        rows.forEach((commit) => {
+            const row = document.createElement('tr');
+            row.className = 'commit-row' + (commit.fullHash === '-' ? ' is-disabled' : '');
+            row.dataset.commitHash = commit.fullHash || '';
+
+            const titleCell = document.createElement('td');
+            titleCell.textContent = commit.message ? commit.message.split(/\r?\n/, 1)[0].trim() || commit.message : '';
+            if (titleCell.textContent.length > 72) {
+                titleCell.textContent = `${titleCell.textContent.slice(0, 71)}...`;
+            }
+
+            const authorCell = document.createElement('td');
+            authorCell.textContent = commit.author || '';
+
+            const dateCell = document.createElement('td');
+            dateCell.textContent = commit.date ? new Date(commit.date).toLocaleString('es-ES', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            }).replace(',', '') : '';
+
+            const hashCell = document.createElement('td');
+            hashCell.className = 'commit-hash-cell';
+
+            if (commit.fullHash === '-') {
+                hashCell.textContent = commit.hash || '';
+            } else {
+                const hashLink = document.createElement('button');
+                hashLink.type = 'button';
+                hashLink.className = 'commit-hash-link';
+                hashLink.dataset.commitHash = commit.fullHash || '';
+                hashLink.textContent = commit.hash || '';
+                hashLink.setAttribute('aria-label', `Copy commit ${commit.fullHash || ''}`);
+                hashCell.appendChild(hashLink);
+            }
+
+            row.appendChild(titleCell);
+            row.appendChild(authorCell);
+            row.appendChild(dateCell);
+            row.appendChild(hashCell);
+            tbody.appendChild(row);
+            attachCommitRowHandlers(row);
+        });
+
+        currentCommitOffset = typeof message.offset === 'number' ? message.offset : currentCommitOffset + rows.length;
+        hasMoreCommits = Boolean(message.hasMore);
+        isLoadingMoreCommits = false;
+        return;
+    }
+
     if (message.type === 'commitDetails') {
         if (message.commitHash !== selectedCommitHash) {
             return;
